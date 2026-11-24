@@ -57,7 +57,7 @@ export function Logo({ size = 36, inverted = false }: { size?: number; inverted?
   );
 }
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -73,6 +73,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
           </button>
         </div>
         {children}
+        {footer && <div className="modal-footer">{footer}</div>}
       </div>
     </div>
   );

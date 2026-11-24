@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import { api, getToken, setToken } from "@/lib/api";
 import type { Me } from "@/lib/types";
@@ -8,8 +15,18 @@ import { ToastHost } from "./ui";
 import { SmsHost } from "./sms";
 
 // sms: administrator SMS yuborishni yoqib qo'yganmi (o'chirilgan bo'lsa SMS tugmalari ko'rinmaydi)
-type Ctx = { me: Me; reload: () => void; logout: () => void; can: (perm: string) => boolean; sms: boolean };
+type Ctx = {
+  me: Me;
+  reload: () => void;
+  logout: () => void;
+  can: (perm: string) => boolean;
+  sms: boolean;
+};
 const SessionCtx = createContext<Ctx | null>(null);
+
+let cachedMe: Me | null = null;
+let cachedToken: string | null = null;
+let meRequest: Promise<Me | null> | null = null;
 
 export function useSession() {
   const ctx = useContext(SessionCtx);
@@ -18,30 +35,65 @@ export function useSession() {
 }
 
 /** Do'kon xodimlari uchun sessiya: token bo'lmasa /login sahifasiga yo'naltiradi */
-export function SessionProvider({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
+export function SessionProvider({
+  children,
+  fallback,
+}: {
+  children: ReactNode;
+  fallback?: ReactNode;
+}) {
   const router = useRouter();
-  const [me, setMe] = useState<Me | null>(null);
+  const [me, setMe] = useState<Me | null>(cachedMe);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    if (!getToken()) {
+    const token = getToken();
+    if (!token) {
+      cachedMe = null;
+      cachedToken = null;
       router.replace("/login");
       return;
     }
-    api<Me>("/auth/me")
+    if (cachedToken !== token) {
+      cachedMe = null;
+      cachedToken = token;
+      setMe(null);
+      setError(null);
+    }
+    if (cachedMe) {
+      setMe(cachedMe);
+      return;
+    }
+    if (meRequest) {
+      meRequest.then((m) => m && setMe(m)).catch((e) => setError(e.message));
+      return;
+    }
+    meRequest = api<Me>("/auth/me")
       .then((m) => {
         if (!m.store) {
           router.replace("/admin");
-          return;
+          return null;
         }
+        cachedMe = m;
         setMe(m);
+        return m;
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => {
+        setError(e.message);
+        return null;
+      })
+      .finally(() => {
+        meRequest = null;
+      });
   }, [router]);
 
   useEffect(load, [load]);
 
   const logout = useCallback(() => {
+    cachedMe = null;
+    cachedToken = null;
+    meRequest = null;
+    setMe(null);
     setToken(null);
     router.replace("/login");
   }, [router]);
@@ -59,7 +111,15 @@ export function SessionProvider({ children, fallback }: { children: ReactNode; f
   if (!me) return <>{fallback ?? null}</>;
 
   return (
-    <SessionCtx.Provider value={{ me, reload: load, logout, can: (p) => !!me.permissions[p], sms: me.sms }}>
+    <SessionCtx.Provider
+      value={{
+        me,
+        reload: load,
+        logout,
+        can: (p) => !!me.permissions[p],
+        sms: me.sms,
+      }}
+    >
       {children}
       <ToastHost />
       <SmsHost />

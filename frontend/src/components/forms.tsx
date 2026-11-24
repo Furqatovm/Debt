@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { api, useApi } from "@/lib/api";
-import { addDaysIso, money, moneyInput, parseMoney, todayIso } from "@/lib/format";
+import {
+  addDaysIso,
+  money,
+  moneyInput,
+  parseMoney,
+  todayIso,
+} from "@/lib/format";
 import type { Client } from "@/lib/types";
 import { Field, Modal, Toggle, toast } from "./ui";
 import { openSms } from "./sms";
@@ -35,33 +41,208 @@ export function ClientPicker({
   kind?: "customer" | "supplier" | "all";
 }) {
   const { data } = useClients(kind);
-  const list = (data?.clients || []).filter((c) => !onlyDebtors || c.remaining > 0);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const allClients = (data?.clients || []).filter(
+    (c) => !onlyDebtors || c.remaining > 0,
+  );
+  const query = search.trim().toLowerCase();
+  const list = allClients.filter((c) => {
+    if (!query) return true;
+    const phone = c.phone.replace(/\D/g, "");
+    return (
+      c.name.toLowerCase().includes(query) ||
+      phone.includes(query.replace(/\D/g, ""))
+    );
+  });
+  const selected =
+    typeof value === "number" ? allClients.find((c) => c.id === value) : null;
+
+  function chooseClient(id: number | "new" | "") {
+    onChange(id);
+    setOpen(false);
+    setSearch("");
+  }
+
   return (
     <>
       <Field label="Mijoz" id="f-client">
-        <select
-          id="f-client"
-          className="input"
-          value={value}
-          onChange={(e) => onChange(e.target.value === "new" ? "new" : e.target.value ? Number(e.target.value) : "")}
+        <div
+          style={{ position: "relative" }}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node))
+              setOpen(false);
+          }}
         >
-          <option value="">— Mijozni tanlang —</option>
-          {list.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.remaining > 0 ? ` — ${money(c.remaining)} qoldiq` : ""}
-            </option>
-          ))}
-          {setNewName && <option value="new">+ Yangi mijoz</option>}
-        </select>
+          <input
+            id="f-client"
+            className="input"
+            role="combobox"
+            aria-expanded={open}
+            aria-controls="f-client-list"
+            autoComplete="off"
+            value={
+              open
+                ? search
+                : selected?.name || (value === "new" ? "+ Yangi mijoz" : "")
+            }
+            placeholder="— Mijozni qidirib tanlang —"
+            onFocus={() => setOpen(true)}
+            onChange={(e) => {
+              setOpen(true);
+              setSearch(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setOpen(false);
+              if (e.key === "Enter" && list.length === 1) {
+                e.preventDefault();
+                chooseClient(list[0].id);
+              }
+            }}
+          />
+          {open && (
+            <div
+              id="f-client-list"
+              role="listbox"
+              style={{
+                position: "absolute",
+                zIndex: 20,
+                left: 0,
+                right: 0,
+                top: "calc(100% + 6px)",
+                maxHeight: 220,
+                overflowY: "auto",
+                border: "1px solid var(--line)",
+                borderRadius: 14,
+                background: "#fff",
+                boxShadow: "0 14px 32px rgba(19,32,26,.16)",
+                padding: 6,
+              }}
+            >
+              {list.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="option"
+                  aria-selected={value === c.id}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => chooseClient(c.id)}
+                  style={{
+                    width: "100%",
+                    border: "none",
+                    background:
+                      value === c.id ? "var(--green-soft)" : "transparent",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  <span style={{ minWidth: 0 }}>
+                    <span
+                      style={{
+                        display: "block",
+                        fontWeight: 700,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {c.name}
+                    </span>
+                    {c.phone && (
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: 12,
+                          color: "var(--muted)",
+                        }}
+                      >
+                        {c.phone}
+                      </span>
+                    )}
+                  </span>
+                  {c.remaining > 0 && (
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: "var(--orange)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {money(c.remaining)} qoldiq
+                    </span>
+                  )}
+                </button>
+              ))}
+              {list.length === 0 && (
+                <div
+                  style={{
+                    padding: "12px 10px",
+                    fontSize: 13,
+                    color: "var(--muted)",
+                  }}
+                >
+                  Mijoz topilmadi
+                </div>
+              )}
+              {setNewName && (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={value === "new"}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => chooseClient("new")}
+                  style={{
+                    width: "100%",
+                    border: "none",
+                    background: "var(--soft)",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    marginTop: 4,
+                    textAlign: "left",
+                    color: "var(--green-deep)",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  + Yangi mijoz
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </Field>
       {value === "new" && setNewName && setNewPhone && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: 10,
+          }}
+        >
           <Field label="Ism familiya" id="f-new-name">
-            <input id="f-new-name" className="input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Masalan: Akmal Karimov" />
+            <input
+              id="f-new-name"
+              className="input"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Masalan: Akmal Karimov"
+            />
           </Field>
           <Field label="Telefon" id="f-new-phone">
-            <input id="f-new-phone" className="input" inputMode="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="90 123 45 67" />
+            <input
+              id="f-new-phone"
+              className="input"
+              inputMode="tel"
+              value={newPhone}
+              onChange={(e) => setNewPhone(e.target.value)}
+              placeholder="90 123 45 67"
+            />
           </Field>
         </div>
       )}
@@ -69,7 +250,15 @@ export function ClientPicker({
   );
 }
 
-export function DebtModal({ onClose, onSaved, clientId }: { onClose: () => void; onSaved: () => void; clientId?: number }) {
+export function DebtModal({
+  onClose,
+  onSaved,
+  clientId,
+}: {
+  onClose: () => void;
+  onSaved: () => void;
+  clientId?: number;
+}) {
   const [direction, setDirection] = useState<"give" | "take">("give");
   const [client, setClient] = useState<number | "new" | "">(clientId ?? "");
   const [newName, setNewName] = useState("");
@@ -114,22 +303,58 @@ export function DebtModal({ onClose, onSaved, clientId }: { onClose: () => void;
 
   return (
     <Modal title="Yangi qarz" onClose={onClose}>
-      <div className="seg" style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-        <button className={direction === "give" ? "on" : ""} onClick={() => setDirection("give")}>
+      <div
+        className="seg"
+        style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}
+      >
+        <button
+          className={direction === "give" ? "on" : ""}
+          onClick={() => setDirection("give")}
+        >
           Qarz berdim
         </button>
-        <button className={direction === "take" ? "on" : ""} onClick={() => setDirection("take")}>
+        <button
+          className={direction === "take" ? "on" : ""}
+          onClick={() => setDirection("take")}
+        >
           Qarz oldim
         </button>
       </div>
-      <ClientPicker value={client} onChange={setClient} newName={newName} setNewName={setNewName} newPhone={newPhone} setNewPhone={setNewPhone} />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "end" }}>
+      <ClientPicker
+        value={client}
+        onChange={setClient}
+        newName={newName}
+        setNewName={setNewName}
+        newPhone={newPhone}
+        setNewPhone={setNewPhone}
+      />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr auto",
+          gap: 10,
+          alignItems: "end",
+        }}
+      >
         <Field label="Summa" id="f-amount">
-          <input id="f-amount" className="input" inputMode="numeric" value={amount} onChange={(e) => setAmount(moneyInput(e.target.value))} placeholder="500 000" style={{ fontSize: 16, fontWeight: 800 }} />
+          <input
+            id="f-amount"
+            className="input"
+            inputMode="numeric"
+            value={amount}
+            onChange={(e) => setAmount(moneyInput(e.target.value))}
+            placeholder="500 000"
+            style={{ fontSize: 16, fontWeight: 800 }}
+          />
         </Field>
         <div className="seg" style={{ height: 46, alignItems: "center" }}>
           {(["UZS", "USD"] as const).map((c) => (
-            <button key={c} className={currency === c ? "on" : ""} onClick={() => setCurrency(c)} style={{ height: 36 }}>
+            <button
+              key={c}
+              className={currency === c ? "on" : ""}
+              onClick={() => setCurrency(c)}
+              style={{ height: 36 }}
+            >
               {c}
             </button>
           ))}
@@ -137,24 +362,62 @@ export function DebtModal({ onClose, onSaved, clientId }: { onClose: () => void;
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Field label="Sana" id="f-date">
-          <input id="f-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
+          <input
+            id="f-date"
+            type="date"
+            className="input"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
         </Field>
         <Field label="Qaytarish muddati" id="f-due">
-          <input id="f-due" type="date" className="input" value={due} onChange={(e) => setDue(e.target.value)} />
+          <input
+            id="f-due"
+            type="date"
+            className="input"
+            value={due}
+            onChange={(e) => setDue(e.target.value)}
+          />
         </Field>
       </div>
       <Field label="Izoh" id="f-note">
-        <textarea id="f-note" className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Masalan: 2 qop un, 1 yashik yog'" />
+        <textarea
+          id="f-note"
+          className="input"
+          rows={2}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Masalan: 2 qop un, 1 yashik yog'"
+        />
       </Field>
-      <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 12, borderRadius: 14, background: "var(--soft)", cursor: "pointer" }}>
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: 12,
+          borderRadius: 14,
+          background: "var(--soft)",
+          cursor: "pointer",
+        }}
+      >
         <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span style={{ fontSize: 14, fontWeight: 700 }}>{smsOn ? "SMS eslatma" : "Eslatma"}</span>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>Muddatdan 1 kun oldin sizga eslatiladi</span>
+          <span style={{ fontSize: 14, fontWeight: 700 }}>
+            {smsOn ? "SMS eslatma" : "Eslatma"}
+          </span>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>
+            Muddatdan 1 kun oldin sizga eslatiladi
+          </span>
         </span>
         <Toggle on={sms} onChange={setSms} label="SMS eslatma" />
       </label>
       {err && <div className="err">{err}</div>}
-      <button className="btn btn-primary" style={{ height: 48 }} disabled={busy} onClick={save}>
+      <button
+        className="btn btn-primary"
+        style={{ height: 48 }}
+        disabled={busy}
+        onClick={save}
+      >
         {busy ? "Saqlanmoqda…" : "Saqlash"}
       </button>
     </Modal>
@@ -185,9 +448,18 @@ export function PaymentForm({
     if (!debtId && typeof client !== "number") return setErr("Mijozni tanlang");
     setBusy(true);
     try {
-      const r = await api<{ receipt: { phone: string; text: string } | null }>("/payments", {
-        body: { debtId, clientId: debtId ? undefined : client, amount: parseMoney(amount), method, sendReceipt: receipt },
-      });
+      const r = await api<{ receipt: { phone: string; text: string } | null }>(
+        "/payments",
+        {
+          body: {
+            debtId,
+            clientId: debtId ? undefined : client,
+            amount: parseMoney(amount),
+            method,
+            sendReceipt: receipt,
+          },
+        },
+      );
       toast("To'lov saqlandi");
       if (r.receipt) openSms(r.receipt);
       setAmount("");
@@ -201,11 +473,37 @@ export function PaymentForm({
 
   return (
     <>
-      {!debtId && <ClientPicker value={client} onChange={setClient} onlyDebtors kind="customer" />}
+      {!debtId && (
+        <ClientPicker
+          value={client}
+          onChange={setClient}
+          onlyDebtors
+          kind="customer"
+        />
+      )}
       <Field label="Summa" id="p-sum">
-        <input id="p-sum" className="input" inputMode="numeric" value={amount} onChange={(e) => setAmount(moneyInput(e.target.value))} placeholder="500 000" style={{ height: 44, background: "#fff", fontSize: 16, fontWeight: 800 }} />
+        <input
+          id="p-sum"
+          className="input"
+          inputMode="numeric"
+          value={amount}
+          onChange={(e) => setAmount(moneyInput(e.target.value))}
+          placeholder="500 000"
+          style={{
+            height: 44,
+            background: "#fff",
+            fontSize: 16,
+            fontWeight: 800,
+          }}
+        />
       </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 6,
+        }}
+      >
         {METHODS.map((m) => (
           <button
             key={m}
@@ -213,7 +511,10 @@ export function PaymentForm({
             style={{
               height: 36,
               borderRadius: 10,
-              border: method === m ? "1.5px solid var(--green)" : "1px solid var(--line)",
+              border:
+                method === m
+                  ? "1.5px solid var(--green)"
+                  : "1px solid var(--line)",
               background: method === m ? "var(--green-soft)" : "#fff",
               color: method === m ? "var(--green)" : "var(--ink-2)",
               fontSize: 12,
@@ -225,20 +526,43 @@ export function PaymentForm({
         ))}
       </div>
       {!compact && smsOn && (
-        <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, cursor: "pointer", fontSize: 14, fontWeight: 600 }}>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            cursor: "pointer",
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
           Mijozga SMS chek yuborish (telefoningizdan)
           <Toggle on={receipt} onChange={setReceipt} label="SMS chek" />
         </label>
       )}
       {err && <div className="err">{err}</div>}
-      <button className="btn btn-primary" style={{ height: 46, fontWeight: 800 }} disabled={busy} onClick={save}>
+      <button
+        className="btn btn-primary"
+        style={{ height: 46, fontWeight: 800 }}
+        disabled={busy}
+        onClick={save}
+      >
         {busy ? "Saqlanmoqda…" : "To'lovni saqlash"}
       </button>
     </>
   );
 }
 
-export function PaymentModal({ onClose, onSaved, clientId }: { onClose: () => void; onSaved: () => void; clientId?: number }) {
+export function PaymentModal({
+  onClose,
+  onSaved,
+  clientId,
+}: {
+  onClose: () => void;
+  onSaved: () => void;
+  clientId?: number;
+}) {
   return (
     <Modal title="To'lov qabul qilish" onClose={onClose}>
       <PaymentForm
@@ -252,10 +576,20 @@ export function PaymentModal({ onClose, onSaved, clientId }: { onClose: () => vo
   );
 }
 
-export function ClientModal({ onClose, onSaved, client }: { onClose: () => void; onSaved: () => void; client?: Client }) {
+export function ClientModal({
+  onClose,
+  onSaved,
+  client,
+}: {
+  onClose: () => void;
+  onSaved: () => void;
+  client?: Client;
+}) {
   const [name, setName] = useState(client?.name || "");
   const [phone, setPhone] = useState(client?.phone || "");
-  const [kind, setKind] = useState<"customer" | "supplier">(client?.kind || "customer");
+  const [kind, setKind] = useState<"customer" | "supplier">(
+    client?.kind || "customer",
+  );
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -263,7 +597,11 @@ export function ClientModal({ onClose, onSaved, client }: { onClose: () => void;
     setErr(null);
     setBusy(true);
     try {
-      if (client) await api(`/clients/${client.id}`, { method: "PUT", body: { name, phone } });
+      if (client)
+        await api(`/clients/${client.id}`, {
+          method: "PUT",
+          body: { name, phone },
+        });
       else await api("/clients", { body: { name, phone, kind } });
       toast(client ? "Mijoz yangilandi" : "Mijoz qo'shildi");
       onSaved();
@@ -276,25 +614,55 @@ export function ClientModal({ onClose, onSaved, client }: { onClose: () => void;
   }
 
   return (
-    <Modal title={client ? "Mijozni tahrirlash" : "Yangi mijoz"} onClose={onClose}>
+    <Modal
+      title={client ? "Mijozni tahrirlash" : "Yangi mijoz"}
+      onClose={onClose}
+    >
       {!client && (
-        <div className="seg" style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-          <button className={kind === "customer" ? "on" : ""} onClick={() => setKind("customer")}>
+        <div
+          className="seg"
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}
+        >
+          <button
+            className={kind === "customer" ? "on" : ""}
+            onClick={() => setKind("customer")}
+          >
             Mijoz
           </button>
-          <button className={kind === "supplier" ? "on" : ""} onClick={() => setKind("supplier")}>
+          <button
+            className={kind === "supplier" ? "on" : ""}
+            onClick={() => setKind("supplier")}
+          >
             Yetkazib beruvchi
           </button>
         </div>
       )}
       <Field label="Ism familiya" id="c-name">
-        <input id="c-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Masalan: Akmal Karimov" />
+        <input
+          id="c-name"
+          className="input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Masalan: Akmal Karimov"
+        />
       </Field>
       <Field label="Telefon raqam" id="c-phone">
-        <input id="c-phone" className="input" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998 90 123 45 67" />
+        <input
+          id="c-phone"
+          className="input"
+          inputMode="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="+998 90 123 45 67"
+        />
       </Field>
       {err && <div className="err">{err}</div>}
-      <button className="btn btn-primary" style={{ height: 48 }} disabled={busy} onClick={save}>
+      <button
+        className="btn btn-primary"
+        style={{ height: 48 }}
+        disabled={busy}
+        onClick={save}
+      >
         {busy ? "Saqlanmoqda…" : "Saqlash"}
       </button>
     </Modal>
