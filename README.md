@@ -5,7 +5,7 @@ Qarz daftari: do'kon uchun mobil ilova, CRM, boshqaruv paneli va platforma admin
 - `Backend/` — REST API (Node.js 22.13+, Express 5, o'rnatilgan `node:sqlite`)
 - `frontend/` — Next.js 16 (App Router)
 
-## Ishga tushirish
+## Ishga tushirish ldkalkdaldslakl
 
 ```bash
 # 1) Backend  →  http://localhost:4000/api
